@@ -1,0 +1,82 @@
+---
+title: "Practical Machine Learning Course Project"
+output: html_document
+---
+
+This report describes how classification was performed on a human activity recognition data set. Data from sensor devices is classified in one of five ways (classes A, B C, D, E). The type of sensor data, its timestamps and the meaning of the classes is not essential to the project and is not discussed in this report. Instead, the report takes the read through the steps ofdata analysis: 
+
+* Define goal
+* Aquire data
+* Define features
+* Train model
+* Validate model
+* Predict classes of unlabeled data
+
+## Define goal
+Given a set of time series sensor data, decide if a person is performing an specific activity (weight lifting) correctly, or if the person performing the task incorrectly. If the task is being performed incorrectly, determine what the mistake is. In this data set, class A means the task was performed correctly and classes B-E are different kinds of errors.  
+
+Train a machine learning model and use cross-fold validation to determine its accurary and kappa values. Also, predict the class for 20 unlabelled features.
+
+##Acquire the data
+Download the training and test sets from the Internet.
+```{r}
+# Data was downloaded previously therefore next two statements are commented out.
+# download.file(destfile="training.csv", url='https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv')
+# download.file(destfile = 'test.csv', url='https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv')
+
+#Load data into workspace
+train = read.csv('training.csv', stringsAsFactors=FALSE)
+test = read.csv('test.csv', stringsAsFactors=FALSE)
+```
+
+## Define features
+I have chosen to not use the timestamp and window information in the data set. Modeling the data as time series could lead to better, more powerful models, but the extra effort is not justified for this assignment. Also, the unlabeled test data is has time stamps, but it not ordered in time. It looks like features were extracted from the data set at random. Training a time servies model would not benefit predictions made on the test data.
+```{r}
+#Remove observation ID, subject name, and timestamp/window information
+#With only 20 items in the test set, it doesn't make much sense to treat them as time series data.
+train = train[,-(1:8)]
+#For test set, also remove problem ID
+test = test[,-c(1:8, 160)]
+
+#Data frame still has a lot of garbage in the form:
+#$ skewness_yaw_belt       : chr  "" "" "" "" ...
+#$ max_roll_belt           : num  NA NA NA NA NA NA NA NA NA NA ...
+
+#Remove any atribute with more than 50% NA or empty strings
+getGetFeatureAttributes = function(df) { 
+  cutoff = 0.5 * nrow(df)
+  good_cols1 = colSums(is.na(df)) < cutoff 
+  #Define helper function. Return true if input is an empty string
+  equalsEmptyString = function(x) x==""
+  good_cols2 = colSums(equalsEmptyString(df)) < cutoff
+  good_cols_all = good_cols1 & good_cols2
+  return(good_cols_all)
+}
+
+test = test[,getGetFeatureAttributes(test)]
+train = train[, getGetFeatureAttributes(train)]
+
+#The only non-numeric attribute left is the classification or "classe"
+#Caret gets pissy if the classes are characters and not factors.
+train$classe = as.factor(train$classe)
+
+```
+
+### Setup R environment
+```{r}
+# If packages not installed, uncomment following three statements.
+# install.packages("caret")
+# install.packages('e1071')
+# install.packages'doMC')
+library(caret)
+library(e1071)
+library(doMC)
+
+#Enable parallel computation for 4 cores
+registerDoMC(cores = 6)
+
+#This might make the results reproducible
+set.seed(1)
+```
+
+
