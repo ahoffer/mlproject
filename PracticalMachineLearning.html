@@ -98,7 +98,7 @@ train = train[,-(1:8)]
 #For test set, also remove problem ID
 test = test[,-c(1:8, 160)]
 
-#Data frame still has a lot of garbage in the form:
+#Data frame still has a lot of garbage in the form empty strings and NAs:
 #$ skewness_yaw_belt       : chr  &quot;&quot; &quot;&quot; &quot;&quot; &quot;&quot; ...
 #$ max_roll_belt           : num  NA NA NA NA NA NA NA NA NA NA ...
 
@@ -119,26 +119,108 @@ train = train[, getGetFeatureAttributes(train)]
 #The only non-numeric attribute left is the classification or &quot;classe&quot;
 #Caret gets pissy if the classes are characters and not factors.
 train$classe = as.factor(train$classe)</code></pre>
-<div id="setup-r-environment" class="section level3">
-<h3>Setup R environment</h3>
-<pre class="r"><code># If packages not installed, uncomment following three statements.
-# install.packages(&quot;caret&quot;)
-# install.packages('e1071')
-# install.packages'doMC')
-library(caret)</code></pre>
-<pre><code>## Loading required package: lattice
-## Loading required package: ggplot2</code></pre>
-<pre class="r"><code>library(e1071)
-library(doMC)</code></pre>
-<pre><code>## Loading required package: foreach
-## Loading required package: iterators
-## Loading required package: parallel</code></pre>
-<pre class="r"><code>#Enable parallel computation for 4 cores
+</div>
+<div id="train-model" class="section level2">
+<h2>Train Model</h2>
+<p>We will create two models, a random forest and a graident boosting machine. To both evualte the model for out of sample error, we will ask R to perform cross-validation with 7 folds. The test data is divided into seven groups. Each time the model is trained, one group is held-out as a validation set. The effect is that the model evaluated against seven different groups and that is how its out-of-sample error is determined.</p>
+<pre class="r"><code>#Run the models using parallel processing.
 registerDoMC(cores = 6)
 
 #This might make the results reproducible
-set.seed(1)</code></pre>
+set.seed(1)
+
+#Use cross fold validation with 7 folds.
+trainCtrl = trainControl(method='cv', number=7)
+
+#Define helper function to test different machine learning algorithms
+learn = function(x) train(classe ~ ., data=train, method=x, trControl=trainCtrl, preProcess=c(&quot;scale&quot;, &quot;center&quot;))
+
+#Create some models
+gbm_model = learn('gbm')</code></pre>
+<pre><code>## Loading required package: gbm
+## Loading required package: survival
+## 
+## Attaching package: 'survival'
+## 
+## The following object is masked from 'package:caret':
+## 
+##     cluster
+## 
+## Loading required package: splines
+## Loaded gbm 2.1.1
+## Loading required package: plyr</code></pre>
+<pre><code>## Iter   TrainDeviance   ValidDeviance   StepSize   Improve
+##      1        1.6094             nan     0.1000    0.2135
+##      2        1.4766             nan     0.1000    0.1482
+##      3        1.3863             nan     0.1000    0.1158
+##      4        1.3161             nan     0.1000    0.1062
+##      5        1.2509             nan     0.1000    0.0828
+##      6        1.2006             nan     0.1000    0.0786
+##      7        1.1530             nan     0.1000    0.0693
+##      8        1.1108             nan     0.1000    0.0663
+##      9        1.0701             nan     0.1000    0.0546
+##     10        1.0362             nan     0.1000    0.0505
+##     20        0.8092             nan     0.1000    0.0264
+##     40        0.5601             nan     0.1000    0.0096
+##     60        0.4277             nan     0.1000    0.0075
+##     80        0.3445             nan     0.1000    0.0041
+##    100        0.2862             nan     0.1000    0.0040
+##    120        0.2393             nan     0.1000    0.0032
+##    140        0.2039             nan     0.1000    0.0020
+##    150        0.1903             nan     0.1000    0.0019</code></pre>
+<pre class="r"><code>rf_model = learn('rf')</code></pre>
+<pre><code>## Loading required package: randomForest
+## randomForest 4.6-10
+## Type rfNews() to see new features/changes/bug fixes.</code></pre>
 </div>
+<div id="validate-models" class="section level2">
+<h2>Validate models</h2>
+<p>The models are validated by two metrics: accuracy and “kappa”. Accuracy is somple the persentage of observations that were correctly classified. However, even if we randomly guessed, we would expect an accuracy greater than zero because sometimes we would guess correctly. The kappa takes into account the frequency different classes appears in the data and determines how much better the accuracy of the model is over random guessing. A kappa score of zero means the model is not better than guessing. A kappa score of 100% means the model had perfect acurracy.</p>
+<pre class="r"><code>#Look at accuracy and kappa
+gbm_model$results</code></pre>
+<pre><code>##   shrinkage interaction.depth n.minobsinnode n.trees  Accuracy     Kappa
+## 1       0.1                 1             10      50 0.7385074 0.6683965
+## 4       0.1                 2             10      50 0.8521047 0.8126256
+## 7       0.1                 3             10      50 0.8942002 0.8660626
+## 2       0.1                 1             10     100 0.8138312 0.7643312
+## 5       0.1                 2             10     100 0.9064827 0.8816425
+## 8       0.1                 3             10     100 0.9422591 0.9269334
+## 3       0.1                 1             10     150 0.8463454 0.8054933
+## 6       0.1                 2             10     150 0.9311488 0.9128680
+## 9       0.1                 3             10     150 0.9601982 0.9496422
+##    AccuracySD     KappaSD
+## 1 0.008448357 0.010752359
+## 4 0.004894129 0.006274766
+## 7 0.006165852 0.007803520
+## 2 0.004333578 0.005555103
+## 5 0.004598925 0.005854138
+## 8 0.004787611 0.006055088
+## 3 0.007200793 0.009123810
+## 6 0.004547613 0.005761768
+## 9 0.003864098 0.004888024</code></pre>
+<pre class="r"><code>rf_model$results</code></pre>
+<pre><code>##   mtry  Accuracy     Kappa   AccuracySD     KappaSD
+## 1    2 0.9944959 0.9930372 0.0011065316 0.001400268
+## 2   26 0.9951584 0.9938752 0.0008949093 0.001132455
+## 3   51 0.9918971 0.9897492 0.0014359824 0.001816944</code></pre>
+<p>The accuracy and kappa are very, very good for both models. Random forest was the winner. When the number of trees was set to 100 and the number of variables per level (mtry) set to 26, the kappa was 0.994. The standard deviation of the kappa was just 0.002. In most circumstances, that would indicate the model is overfit, but the cross validation with 7 folds suggests the out-sample-error will be low, even as low as 1-accuracy, which is just 0.6%.</p>
+<p>Accuracy is only one measure of quality. The confusion matrix is a way to understand how well the model performed for each class it predicted. The the number of correct number of instances for each class is the sum of a column. The the number times the model predicted a particular class is the sum of a row. In the confusion matrix below</p>
+<pre class="r"><code>confusionMatrix(rf_model)</code></pre>
+<pre><code>## Cross-Validated (7 fold) Confusion Matrix 
+## 
+## (entries are percentages of table totals)
+##  
+##           Reference
+## Prediction    A    B    C    D    E
+##          A 28.4  0.1  0.0  0.0  0.0
+##          B  0.0 19.2  0.1  0.0  0.0
+##          C  0.0  0.0 17.3  0.1  0.0
+##          D  0.0  0.0  0.0 16.2  0.0
+##          E  0.0  0.0  0.0  0.0 18.3</code></pre>
+</div>
+<div id="predict-classes-of-unlabeled-data" class="section level2">
+<h2>Predict classes of unlabeled data</h2>
+<p>This section is not included in the report.</p>
 </div>
 
 

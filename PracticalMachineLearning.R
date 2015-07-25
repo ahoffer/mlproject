@@ -27,7 +27,7 @@ library(e1071)
 
 #Enable parallel computation for 4 cores
 library(doMC)
-registerDoMC(cores = 4)
+registerDoMC(cores = 6)
 
 #This might make the results reproducible
 set.seed(1)
@@ -67,6 +67,10 @@ train$classe = as.factor(train$classe)
 trainCtrl = trainControl(method='cv', number=7)
 
 #Define helper function to test different machine learning algorithms
+validation = sample(nrow(train), 0.2 * nrow(train))
+holdout = train[validation,]
+train=train[-validation,]
+
 learn = function(x) train(classe ~ ., data=train, method=x, trControl=trainCtrl, preProcess=c("scale", "center"))
 
 #Create some models
@@ -76,6 +80,9 @@ rf_model = learn('rf')
 #Look at accuracy and kappa
 gbm_model$results
 rf_model$results
+
+predictions = predict(rf_model, holdout[,-52])
+confusionMatrix(predictions, holdout[,52])
 
 #Look at confusion matrices
 confusionMatrix(gbm_model)
@@ -100,7 +107,3 @@ pml_write_files = function(x){
 }
 
 pml_write_files(as.character(answers))
-
-
-
-

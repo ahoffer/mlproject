@@ -38,7 +38,7 @@ train = train[,-(1:8)]
 #For test set, also remove problem ID
 test = test[,-c(1:8, 160)]
 
-#Data frame still has a lot of garbage in the form:
+#Data frame still has a lot of garbage in the form empty strings and NAs:
 #$ skewness_yaw_belt       : chr  "" "" "" "" ...
 #$ max_roll_belt           : num  NA NA NA NA NA NA NA NA NA NA ...
 
@@ -59,11 +59,10 @@ train = train[, getGetFeatureAttributes(train)]
 #The only non-numeric attribute left is the classification or "classe"
 #Caret gets pissy if the classes are characters and not factors.
 train$classe = as.factor(train$classe)
-
 ```
 
+```{r include=FALSE}
 ### Setup R environment
-```{r}
 # If packages not installed, uncomment following three statements.
 # install.packages("caret")
 # install.packages('e1071')
@@ -71,12 +70,42 @@ train$classe = as.factor(train$classe)
 library(caret)
 library(e1071)
 library(doMC)
+```
 
-#Enable parallel computation for 4 cores
+## Train Model
+We will create two models, a random forest and a graident boosting machine. To both evualte the model for out of sample error, we will ask R to perform cross-validation with 7 folds. The test data is divided into seven groups. Each time the model is trained, one group is held-out as a validation set. The effect is that the model evaluated against seven different groups and that is how its out-of-sample error is determined. 
+```{r}
+#Run the models using parallel processing.
 registerDoMC(cores = 6)
 
 #This might make the results reproducible
 set.seed(1)
+
+#Use cross fold validation with 7 folds.
+trainCtrl = trainControl(method='cv', number=7)
+
+#Define helper function to test different machine learning algorithms
+learn = function(x) train(classe ~ ., data=train, method=x, trControl=trainCtrl, preProcess=c("scale", "center"))
+
+#Create some models
+gbm_model = learn('gbm')
+rf_model = learn('rf')
 ```
 
+## Validate models
+The models are validated by two metrics: accuracy and "kappa". Accuracy is somple the persentage of observations that were correctly classified. However, even if we randomly guessed, we would expect an accuracy greater than zero because sometimes we would guess correctly. The kappa takes into account the frequency different classes appears in the data and determines how much better the accuracy of the model is over random guessing. A kappa score of zero means the model is not better than guessing. A kappa score of 100% means the model had perfect acurracy. 
+```{r}
+#Look at accuracy and kappa
+gbm_model$results
+rf_model$results
+```
 
+The accuracy and kappa are very, very good for both models. Random forest was the winner. When the number of trees was set to 100 and the number of variables per level (mtry) set to 26, the kappa was 0.994. The standard deviation of the kappa was just 0.002. In most circumstances, that would indicate the model is overfit, but the cross validation with 7 folds suggests the out-sample-error will be low, even as low as 1-accuracy, which is just 0.6%.
+
+Accuracy is only one measure of quality. The confusion matrix is a way to understand how well the model performed for each class it predicted. The the number of correct number of instances for each class is the sum of a column. The the number times the model predicted a particular class is the sum of a row. In the confusion matrix below
+```{r}
+confusionMatrix(rf_model)
+```
+
+## Predict classes of unlabeled data
+This section is not included in the report.
